@@ -2,10 +2,11 @@ import xlrd
 import openpyxl
 
 '''
-Parameters:
-record is a tuple (wins, losses)
+Parameters: record is a tuple (wins, losses)
 wfsum is an int, the sum of the weighting factors of the team's opponents
 sos_sum is an int, the sum of the strength of schedule of each game of a team
+Effects: the team's rating is calculated from the parameters
+Returns: the team's rating
 '''
 def RatingCalculator(record, wfsum, sos_sum):
     # Calculates the rating for a team
@@ -16,7 +17,7 @@ def RatingCalculator(record, wfsum, sos_sum):
         # 0 losses means an infinite win ratio; set it to 25 instead
         ratio = 25
     else:
-        # 0 wins means a 0 win ration; set it to 0.04 instead
+        # 0 wins means a 0 win ratio; set it to 0.04 instead
         ratio = 1/25
     # Strength of schedule = sum of sos of each game / sum of the weighting factors
     sos = sos_sum / wfsum
@@ -145,7 +146,7 @@ for r in range(firstsheet.nrows):
     else:
         # Eight columns
         for col in range(8):
-            # Col 0 is the team name, col 1 is the raing
+            # Col 0 is the team name, col 1 is the rating
             if col < 2:
                 out.cell(row = r + 1, column = col + 1).value = sortedratings[r - 1][col]
             # Formula to calculate the rank of winning %
