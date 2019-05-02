@@ -3,10 +3,10 @@ import openpyxl
 import json
 
 '''
+The team's rating is calculated from the given parameters
 Parameters: record is a tuple (wins, losses)
 wfsum is an int, the sum of the weighting factors of the team's opponents
 sos_sum is an int, the sum of the strength of schedule of each game of a team
-Effects: the team's rating is calculated from the parameters
 Returns: the team's rating
 '''
 def RatingCalculator(record, wfsum, sos_sum):
