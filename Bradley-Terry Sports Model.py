@@ -1,42 +1,17 @@
 import xlrd
 import openpyxl
 
-'''
-The team's rating is calculated from the given parameters
-Parameters: record is a tuple (wins, losses)
-wfsum is an int, the sum of the weighting factors of the team's opponents
-sos_sum is an int, the sum of the strength of schedule of each game of a team
-Returns: the team's rating
-'''
-def RatingCalculator(record, wfsum, sos_sum):
-    # Calculates the rating for a team
-    if record[1] != 0 and record[0] != 0:
-        # if both wins and losses are not 0, ratio can be calculated as normal
-        ratio = record[0] / record[1]
-    elif record[1] == 0:
-        # 0 losses means an infinite win ratio; set it to 25 instead
-        ratio = 25
-    else:
-        # 0 wins means a 0 win ratio; set it to 0.04 instead
-        ratio = 1/25
-    # Strength of schedule = sum of sos of each game / sum of the weighting factors
-    sos = sos_sum / wfsum
-    # Each team's rating is their win ratio multiplied by their strength of schedule
-    return ratio * sos
-
 # Dictionary of every team's rating; key = team name, value = rating
 ratings = dict()
 # Dictionary of every team's record; key = team name, value = tuple of wins and losses
 record = dict()
-# Dictionary of every team's weighting factor sum; key = team name, value = sum of weighting factors from games
-weightingfactorsum = dict()
-# Dictionary of every team's strength of schedule sum; key = team name, value = sum of strength of schedule from games
-sos_sum = dict()
+# Dictionary of every team's expected wins; key = team name, value = expected wins
+expected = dict()
 # List of tuples which are the games; each tuple is (winner, loser)
 games = []
 # Open the spreadsheet and assign the first 2 sheets
 # Replace with your xlsx file name
-wb = xlrd.open_workbook('Bradley-Terry Spreadsheet CBU.xlsx') 
+wb = xlrd.open_workbook('Bradley-Terry Spreadsheet NCAA Hockey.xlsx') 
 firstsheet = wb.sheet_by_index(0)
 secondsheet = wb.sheet_by_index(1)
 # Dictionary of every team's new rating calculated; key = team name, value = new rating
@@ -59,9 +34,6 @@ while r < firstsheet.nrows:
                     firstsheet.cell_value(r, 2) + 0.5 * firstsheet.cell_value(r, 3))
     # Always start with 100 as every team's rating (using iteration to solve the recursive problem)
     ratings[team] = 100
-    # Initialize the sums to 0
-    sos_sum[team] = 0
-    weightingfactorsum[team] = 0
     # If team is undefeated, we'll get a divide by 0 error, so we set the ratio to 25
     # Note: this formula is most effective when there are no undefeated or winless teams
     # and a chain of wins (or ties) can be made from every team to any other team
@@ -73,7 +45,7 @@ while r < firstsheet.nrows:
     # Win ratio = wins / losses
     else:
         ratio = record[team][0] / record[team][1]
-    # Add the team's win %, win ratio and sos is intialized to 0 (to be summed later)
+    # Add the team's win %, win ratio and sos is intialized to 0 (to be calculated later)
     teaminfo = [record[team][0] / (record[team][0] + record[team][1]), ratio, 0]
     # Add the list of team info to the info dict
     info[team] = teaminfo
@@ -93,29 +65,36 @@ while not done:
     # Initialize the flag to True each time
     flag = True
     
+    # Clear expected wins each iteration
+    expected.clear()
     # For every game, calculate:
     for game in games:
         # Weighting factor (1 divided by the sum of the ratings of the 2 teams)
         wf = 1 / (ratings[game[0]] + ratings[game[1]])
-        # Add the weighting factor to the dict for each team
-        weightingfactorsum[game[0]] += wf
-        weightingfactorsum[game[1]] += wf
-        # SOS for each game is the opponent's rating multiplied by the weighting factor
-        # Add the SOS for the game to the SOS sum for each team
-        sos_sum[game[0]] += (wf * ratings[game[1]])
-        sos_sum[game[1]] += (wf * ratings[game[0]])
+        # Check to see if each team is in expected wins dictionary
+        if game[0] in expected:
+            # Multiply team's rating by weighting factor and add to sum
+            expected[game[0]] += (ratings[game[0]] * wf)
+        else:
+            # Multiply team's rating by weighting factor and initialize as expected wins
+            expected[game[0]] = (ratings[game[0]] * wf)
+        if game[1] in expected:
+            # Multiply team's rating by weighting factor and add to sum
+            expected[game[1]] += (ratings[game[1]] * wf)
+        else:
+            # Multiply team's rating by weighting factor and initialize as expected wins
+            expected[game[1]] = (ratings[game[1]] * wf)
     
     # For every team, calculate:
     for key in ratings:
-        # New rating for the team equals the team's winning ratio multiplied by their SOS
-        # SOS equals the SOS sum divided by the weighting factor sum
-        new_ratings[key] = RatingCalculator(record[key], weightingfactorsum[key], sos_sum[key])
+        # New rating for the team equals the team's wins divided by expected wins multiplied by the old rating
+        new_ratings[key] = (record[key][0] / expected[key]) * ratings[key]
         # Update the SOS for the team
-        info[key][2] = sos_sum[key] / weightingfactorsum[key]
+        info[key][2] = new_ratings[key] / info[key][1]
         # If the difference between old rating and new rating <= DELTA
         # If flag is true, that means so far every team's new rating has been within DELTA
         # (since flag is initialized to true)
-        if abs(ratings[key] - new_ratings[key]) <= DELTA and flag:
+        if abs(ratings[key] - new_ratings[key]) <= DELTA and abs(record[key][0] - expected[key]) <= DELTA and flag:
             done = True
         # If the difference is greater than DELTA, we must continue the recursion
         # If flag is false, one team has already failed the DELTA test and we must continue the recursion
@@ -125,10 +104,22 @@ while not done:
     # After going through all teams, update ratings
     ratings = new_ratings
 
+# Scale the ratings to an average of 100
+for i in range(10):
+    scale_wins = 0
+    for key in ratings:
+        scale_wins += 100 / (100 + ratings[key])
+    scale = scale_wins / 30
+    
+    # Adjust every team's rating and SOS according to scale
+    for key in ratings:
+        ratings[key] *= scale
+        info[key][2] = ratings[key] / info[key][1]
+        
 # Sort the teams by their rating
 sortedratings = sorted(ratings.items(), key=lambda kv: kv[1], reverse = True)
 # Replace with your xlsx file name
-wb = openpyxl.load_workbook('Bradley-Terry Spreadsheet CBU.xlsx')
+wb = openpyxl.load_workbook('Bradley-Terry Spreadsheet NCAA Hockey.xlsx')
 wb.create_sheet('Output')
 # For outputting the results into the spreadsheet
 out = wb.get_sheet_by_name('Output')
@@ -173,4 +164,4 @@ for r in range(firstsheet.nrows):
                 out.cell(row = r + 1, column = col + 1).value = info[sortedratings[r - 1][0]][col - 5]
 
 # Save the sheet with the output
-wb.save('Bradley-Terry Spreadsheet CBU.xlsx')
+wb.save('sample.xlsx')

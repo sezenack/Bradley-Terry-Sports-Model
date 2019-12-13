@@ -26,7 +26,7 @@ def RatingCalculator(record, wfsum, sos_sum):
     return ratio * sos
 
 # Open json file with utf-8 encoding; insert your own json filename
-with open("CBU Post-CT.json", encoding = 'utf-8') as json_file:  
+with open("2043 Post-CT Export.json", encoding = 'utf-8') as json_file:  
     data = json.load(json_file)
 
 # Initialize list of games (will be tuple of (winning team, losing team))
@@ -161,7 +161,7 @@ sortedratings = sorted(ratings.items(), key=lambda kv: kv[1], reverse = True)
 wb.create_sheet('Output')
 # For outputting the results into the spreadsheet
 out = wb.get_sheet_by_name('Output')
-for r in range(len(sortedratings)):
+for r in range(len(sortedratings) + 1):
     # Header row
     if r == 0:
         out.cell(row = r + 1, column = 1).value = 'Team'
@@ -181,7 +181,7 @@ for r in range(len(sortedratings)):
             # Formula to calculate the rank of winning %
             elif col == 2:
                 out.cell(row = r + 1, column = col + 1).value = "=RANK(E" + str(r + 1) + \
-                    ",E2:E" + str(len(sortedratings)) + ")"
+                    ",E2:E" + str(len(sortedratings) + 1) + ")"
             # Output record
             elif col == 3:
                 out.cell(row = r + 1, column = col + 1).value = str(record[sortedratings[r - 1][0]][0]) \
@@ -192,10 +192,10 @@ for r in range(len(sortedratings)):
             # Formula to calculate the SOS rank
             elif col == 6:
                 out.cell(row = r + 1, column = col + 1).value = "=RANK(H" + str(r + 1) + \
-                    ",H2:H" + str(len(sortedratings)) + ")"
+                    ",H2:H" + str(len(sortedratings) + 1) + ")"
             # Output SOS (col 7)
             else:
                 out.cell(row = r + 1, column = col + 1).value = info[sortedratings[r - 1][0]][col - 5]
 
 # Save the sheet with the output
-wb.save('Bradley-Terry Spreadsheet JSON CBU.xlsx')
+wb.save('Bradley-Terry Spreadsheet JSON NCBCA.xlsx')
