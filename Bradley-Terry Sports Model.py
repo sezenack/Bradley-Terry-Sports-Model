@@ -115,7 +115,7 @@ for i in range(10):
     for key in ratings:
         ratings[key] *= scale
         info[key][2] = ratings[key] / info[key][1]
-        
+
 # Sort the teams by their rating
 sortedratings = sorted(ratings.items(), key=lambda kv: kv[1], reverse = True)
 # Replace with your xlsx file name

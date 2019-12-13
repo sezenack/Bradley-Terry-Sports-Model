@@ -2,29 +2,6 @@ import xlrd
 import openpyxl
 import json
 
-'''
-The team's rating is calculated from the given parameters
-Parameters: record is a tuple (wins, losses)
-wfsum is an int, the sum of the weighting factors of the team's opponents
-sos_sum is an int, the sum of the strength of schedule of each game of a team
-Returns: the team's rating
-'''
-def RatingCalculator(record, wfsum, sos_sum):
-    # Calculates the rating for a team
-    if record[1] != 0 and record[0] != 0:
-        # if both wins and losses are not 0, ratio can be calculated as normal
-        ratio = record[0] / record[1]
-    elif record[1] == 0:
-        # 0 losses means an infinite win ratio; set it to 25 instead
-        ratio = 25
-    else:
-        # 0 wins means a 0 win ratio; set it to 0.04 instead
-        ratio = 1/25
-    # Strength of schedule = sum of sos of each game / sum of the weighting factors
-    sos = sos_sum / wfsum
-    # Each team's rating is their win ratio multiplied by their strength of schedule
-    return ratio * sos
-
 # Open json file with utf-8 encoding; insert your own json filename
 with open("2043 Post-CT Export.json", encoding = 'utf-8') as json_file:  
     data = json.load(json_file)
@@ -37,10 +14,8 @@ teams = dict()
 ratings = dict()
 # Dictionary of every team's record; key = team name, value = list of [wins, losses]
 record = dict()
-# Dictionary of every team's weighting factor sum; key = team name, value = sum of weighting factors from games
-weightingfactorsum = dict()
-# Dictionary of every team's strength of schedule sum; key = team name, value = sum of strength of schedule from games
-sos_sum = dict()
+# Dictionary of every team's expected wins; key = team name, value = expected wins
+expected = dict()
 # Dictionary of every team's new rating calculated; key = team name, value = new rating
 new_ratings = dict()
 # Dictionary of every team's info; key = team name, value = list of [win %, win ratio, strength of schedule]
@@ -59,9 +34,6 @@ for t in data["teams"]:
     record[t["region"]] = [0, 0]
     # Always start with 100 as every team's rating (using iteration to solve the recursive problem)
     ratings[t["region"]] = 100
-    # Initialize the sums to 0
-    sos_sum[t["region"]] = 0
-    weightingfactorsum[t["region"]] = 0    
 
 # Create a Workbook
 wb = openpyxl.Workbook()
@@ -123,29 +95,36 @@ while not done:
     # Initialize the flag to True each time
     flag = True
     
+    # Clear expected wins each iteration
+    expected.clear()
     # For every game, calculate:
     for game in games:
         # Weighting factor (1 divided by the sum of the ratings of the 2 teams)
         wf = 1 / (ratings[game[0]] + ratings[game[1]])
-        # Add the weighting factor to the dict for each team
-        weightingfactorsum[game[0]] += wf
-        weightingfactorsum[game[1]] += wf
-        # SOS for each game is the opponent's rating multiplied by the weighting factor
-        # Add the SOS for the game to the SOS sum for each team
-        sos_sum[game[0]] += (wf * ratings[game[1]])
-        sos_sum[game[1]] += (wf * ratings[game[0]])
+        # Check to see if each team is in expected wins dictionary
+        if game[0] in expected:
+            # Multiply team's rating by weighting factor and add to sum
+            expected[game[0]] += (ratings[game[0]] * wf)
+        else:
+            # Multiply team's rating by weighting factor and initialize as expected wins
+            expected[game[0]] = (ratings[game[0]] * wf)
+        if game[1] in expected:
+            # Multiply team's rating by weighting factor and add to sum
+            expected[game[1]] += (ratings[game[1]] * wf)
+        else:
+            # Multiply team's rating by weighting factor and initialize as expected wins
+            expected[game[1]] = (ratings[game[1]] * wf)
     
     # For every team, calculate:
     for key in ratings:
-        # New rating for the team equals the team's winning ratio multiplied by their SOS
-        # SOS equals the SOS sum divided by the weighting factor sum
-        new_ratings[key] = RatingCalculator(record[key], weightingfactorsum[key], sos_sum[key])
+        # New rating for the team equals the team's wins divided by expected wins multiplied by the old rating
+        new_ratings[key] = (record[key][0] / expected[key]) * ratings[key]
         # Update the SOS for the team
-        info[key][2] = sos_sum[key] / weightingfactorsum[key]
+        info[key][2] = new_ratings[key] / info[key][1]
         # If the difference between old rating and new rating <= DELTA
         # If flag is true, that means so far every team's new rating has been within DELTA
         # (since flag is initialized to true)
-        if abs(ratings[key] - new_ratings[key]) <= DELTA and flag:
+        if abs(ratings[key] - new_ratings[key]) <= DELTA and abs(record[key][0] - expected[key]) <= DELTA and flag:
             done = True
         # If the difference is greater than DELTA, we must continue the recursion
         # If flag is false, one team has already failed the DELTA test and we must continue the recursion
@@ -154,6 +133,18 @@ while not done:
             done = False
     # After going through all teams, update ratings
     ratings = new_ratings
+
+# Scale the ratings to an average of 100
+for i in range(10):
+    scale_wins = 0
+    for key in ratings:
+        scale_wins += 100 / (100 + ratings[key])
+    scale = scale_wins / 30
+    
+    # Adjust every team's rating and SOS according to scale
+    for key in ratings:
+        ratings[key] *= scale
+        info[key][2] = ratings[key] / info[key][1]
 
 # Sort the teams by their rating
 sortedratings = sorted(ratings.items(), key=lambda kv: kv[1], reverse = True)
