@@ -1,9 +1,8 @@
-import xlrd
 import openpyxl
 import json
 
 # Open json file with utf-8 encoding; insert your own json filename
-with open("2043 Post-CT Export.json", encoding = 'utf-8') as json_file:  
+with open("College_Basketball__80_League_295_2057_CT_summary.json", encoding = 'utf-8-sig') as json_file:  
     data = json.load(json_file)
 
 # Initialize list of games (will be tuple of (winning team, losing team))
@@ -41,7 +40,12 @@ wb = openpyxl.Workbook()
 out = wb.active
 out.title = "Games"
 # Row counter
-r = 0
+r = 1
+# First row
+out.cell(row = r, column = 1).value = 'Winning Team'
+out.cell(row = r, column = 2).value = 'Winning Score'
+out.cell(row = r, column = 3).value = 'Losing Team'
+out.cell(row = r, column = 4).value = 'Losing Score'
 # Go through all the games and add tuple of (winning team, losing team) to list of games
 # In addition output the games to a sheet so that postseason games can be added with ease
 for g in data["games"]:
@@ -78,16 +82,10 @@ for g in data["games"]:
     teaminfo = [record[teams[loserid]][0] / (record[teams[loserid]][0] + record[teams[loserid]][1]), ratio, 0]
     # Add the list of team info to the info dict
     info[teams[loserid]] = teaminfo
-    if r == 0:
-        out.cell(row = r + 1, column = 1).value = 'Winning Team'
-        out.cell(row = r + 1, column = 2).value = 'Winning Score'
-        out.cell(row = r + 1, column = 3).value = 'Losing Team'
-        out.cell(row = r + 1, column = 4).value = 'Losing Score'
-    else:
-        out.cell(row = r + 1, column = 1).value = teams[winnerid]
-        out.cell(row = r + 1, column = 2).value = g["won"]["pts"]
-        out.cell(row = r + 1, column = 3).value = teams[loserid]
-        out.cell(row = r + 1, column = 4).value = g["lost"]["pts"]
+    out.cell(row = r + 1, column = 1).value = teams[winnerid]
+    out.cell(row = r + 1, column = 2).value = g["won"]["pts"]
+    out.cell(row = r + 1, column = 3).value = teams[loserid]
+    out.cell(row = r + 1, column = 4).value = g["lost"]["pts"]
     r += 1
 
 # Recursion for getting accurate ratings
@@ -139,7 +137,8 @@ for i in range(10):
     scale_wins = 0
     for key in ratings:
         scale_wins += 100 / (100 + ratings[key])
-    scale = scale_wins / 30
+    # The denominator should be the number of teams in the league divided by 2
+    scale = scale_wins / 50
     
     # Adjust every team's rating and SOS according to scale
     for key in ratings:
@@ -155,38 +154,42 @@ out = wb.get_sheet_by_name('Output')
 for r in range(len(sortedratings) + 1):
     # Header row
     if r == 0:
-        out.cell(row = r + 1, column = 1).value = 'Team'
-        out.cell(row = r + 1, column = 2).value = 'Rating'
-        out.cell(row = r + 1, column = 3).value = 'Win % Rank'
-        out.cell(row = r + 1, column = 4).value = 'Record'
-        out.cell(row = r + 1, column = 5).value = 'Win %'
-        out.cell(row = r + 1, column = 6).value = 'Win Ratio'
-        out.cell(row = r + 1, column = 7).value = 'SOS Rank'
-        out.cell(row = r + 1, column = 8).value = 'SOS'
+        out.cell(row = r + 1, column = 1).value = 'Rank'
+        out.cell(row = r + 1, column = 2).value = 'Team'
+        out.cell(row = r + 1, column = 3).value = 'Rating'
+        out.cell(row = r + 1, column = 4).value = 'Win % Rank'
+        out.cell(row = r + 1, column = 5).value = 'Record'
+        out.cell(row = r + 1, column = 6).value = 'Win %'
+        out.cell(row = r + 1, column = 7).value = 'Win Ratio'
+        out.cell(row = r + 1, column = 8).value = 'SOS Rank'
+        out.cell(row = r + 1, column = 9).value = 'SOS'
     else:
-        # Eight columns
-        for col in range(8):
-            # Col 0 is the team name, col 1 is the rating
-            if col < 2:
-                out.cell(row = r + 1, column = col + 1).value = sortedratings[r - 1][col]
+        # Nine columns
+        for col in range(9):
+            # Col 0 is the rank
+            if col == 0:
+                out.cell(row = r + 1, column = col + 1).value = r
+            # Col 1 is the team name, col 2 is the rating
+            elif col < 3:
+                out.cell(row = r + 1, column = col + 1).value = sortedratings[r - 1][col - 1]
             # Formula to calculate the rank of winning %
-            elif col == 2:
-                out.cell(row = r + 1, column = col + 1).value = "=RANK(E" + str(r + 1) + \
-                    ",E2:E" + str(len(sortedratings) + 1) + ")"
-            # Output record
             elif col == 3:
+                out.cell(row = r + 1, column = col + 1).value = "=RANK(F" + str(r + 1) + \
+                    ",F2:F" + str(len(sortedratings) + 1) + ")"
+            # Output record
+            elif col == 4:
                 out.cell(row = r + 1, column = col + 1).value = str(record[sortedratings[r - 1][0]][0]) \
                     + "-" + str(record[sortedratings[r - 1][0]][1])
-            # Output win % (col 4) and win ratio (col 5)
-            elif col < 6:
-                out.cell(row = r + 1, column = col + 1).value = info[sortedratings[r - 1][0]][col - 4]
-            # Formula to calculate the SOS rank
-            elif col == 6:
-                out.cell(row = r + 1, column = col + 1).value = "=RANK(H" + str(r + 1) + \
-                    ",H2:H" + str(len(sortedratings) + 1) + ")"
-            # Output SOS (col 7)
-            else:
+            # Output win % (col 5) and win ratio (col 6)
+            elif col < 7:
                 out.cell(row = r + 1, column = col + 1).value = info[sortedratings[r - 1][0]][col - 5]
+            # Formula to calculate the SOS rank
+            elif col == 7:
+                out.cell(row = r + 1, column = col + 1).value = "=RANK(I" + str(r + 1) + \
+                    ",I2:I" + str(len(sortedratings) + 1) + ")"
+            # Output SOS (col 8)
+            else:
+                out.cell(row = r + 1, column = col + 1).value = info[sortedratings[r - 1][0]][col - 6]
 
 # Save the sheet with the output
 wb.save('Bradley-Terry Spreadsheet JSON NCBCA.xlsx')
