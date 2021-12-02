@@ -27,7 +27,8 @@ flag = True
 g = 2
 while g < firstsheet.max_row + 1:
     # Skip exhibition games
-    if firstsheet.cell(row = g, column = 6).value.strip() == 'EX':
+    marker = firstsheet.cell(row = g, column = 6).value.strip()
+    if marker == 'ex' or marker == 'n3':
         g += 1
         continue
     team1 = firstsheet.cell(row = g, column = 1).value.strip()
@@ -35,6 +36,8 @@ while g < firstsheet.max_row + 1:
     team2 = firstsheet.cell(row = g, column = 3).value.strip()
     team2score = firstsheet.cell(row = g, column = 4).value
     regulation = firstsheet.cell(row = g, column = 5).value
+    if regulation is not None:
+        regulation = regulation.strip()
     # Initialize if necessary
     if team1 not in record:
         record[team1] = [0, 0, 0]
@@ -44,7 +47,9 @@ while g < firstsheet.max_row + 1:
         record[team2] = [0, 0, 0]
         # Always start with 100 as every team's rating (using iteration to solve the recursive problem)
         ratings[team2] = 100
+    
     # Check to see winner
+    # Counts all OT as ties
     if (regulation != '' and regulation is not None) or team1score == team2score:
         record[team1][2] += 1
         record[team2][2] += 1        
@@ -53,12 +58,35 @@ while g < firstsheet.max_row + 1:
         record[team2][1] += 1
     else:
         record[team1][1] += 1
-        record[team2][0] += 1    
+        record[team2][0] += 1
+    
+    # use 55/45 weights for OT
+    #if team1score == team2score:
+        #record[team1][2] += 1
+        #record[team2][2] += 1        
+    #elif team1score > team2score and (regulation == '' or regulation is None):
+        #record[team1][0] += 1
+        #record[team2][1] += 1
+    #elif team1score < team2score and (regulation == '' or regulation is None):
+        #record[team1][1] += 1
+        #record[team2][0] += 1
+    #elif team1score > team2score:
+        #record[team1][0] += 0.55
+        #record[team1][1] += 0.45
+        #record[team2][1] += 0.55
+        #record[team2][0] += 0.45
+    #else:
+        #record[team1][1] += 0.55
+        #record[team1][0] += 0.45
+        #record[team2][0] += 0.55
+        #record[team2][1] += 0.45
+    
     games.append((team1, team2))
     # Increment counter for reading the spreadsheet
     g += 1
-
+    
 # Recursion for getting accurate ratings
+iterations = 0
 while not done:
     # Initialize the flag to True each time
     flag = True
@@ -85,8 +113,8 @@ while not done:
     
     # For every team, calculate:
     for key in ratings:
+        wins = record[key][0] + 0.5 * record[key][2]
         if key not in info:
-            wins = record[key][0] + 0.5 * record[key][2]
             # If team is undefeated, we'll get a divide by 0 error, so we set the ratio to 25
             # Note: this formula is most effective when there are no undefeated or winless teams
             # and a chain of wins (or ties) can be made from every team to any other team
@@ -118,6 +146,7 @@ while not done:
             done = False
     # After going through all teams, update ratings
     ratings = new_ratings.copy()
+    iterations += 1
 
 # Scale the ratings to an average of 100
 for i in range(10):
@@ -179,4 +208,4 @@ for r in range(len(ratings) + 1):
                 out.cell(row = r + 1, column = col + 1).value = info[sortedratings[r - 1][0]][col - 6]
 
 # Save the sheet with the output
-wb.save('sample.xlsx')
+wb.save('Bradley-Terry Spreadsheet NCAA Hockey.xlsx')
