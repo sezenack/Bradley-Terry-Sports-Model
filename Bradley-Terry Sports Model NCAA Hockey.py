@@ -12,7 +12,7 @@ def main():
 
     # Open the spreadsheet and assign the first 2 sheets
     # Replace with your xlsx file name
-    wb = openpyxl.load_workbook('Bradley-Terry Spreadsheet NCAA Hockey.xlsx') 
+    wb = openpyxl.load_workbook('../NCAA games.xlsx') 
     firstsheet = wb.worksheets[0]
     # Value to compare every rating to and then do recursion
     DELTA = 0.0001
@@ -25,16 +25,16 @@ def main():
     g = 2
     while g < firstsheet.max_row + 1:
         # Skip exhibition games
-        marker = firstsheet.cell(row = g, column = 6).value.strip()
+        marker = firstsheet.cell(row = g, column = 7).value.strip()
         if marker == 'ex' or marker == 'n3':
             g += 1
             continue
 
         team1 = firstsheet.cell(row = g, column = 1).value.strip()
         team1score = firstsheet.cell(row = g, column = 2).value
-        team2 = firstsheet.cell(row = g, column = 3).value.strip()
-        team2score = firstsheet.cell(row = g, column = 4).value
-        regulation = firstsheet.cell(row = g, column = 5).value
+        team2 = firstsheet.cell(row = g, column = 4).value.strip()
+        team2score = firstsheet.cell(row = g, column = 5).value
+        regulation = firstsheet.cell(row = g, column = 6).value
         if regulation is not None:
             regulation = regulation.strip()
         
@@ -168,7 +168,7 @@ def main():
     # Create new sheet for output
     wb.create_sheet('Output')
     # For outputting the results into the spreadsheet
-    out = wb.get_sheet_by_name('Output')
+    out = wb['Output']
     for r in range(len(sortedratings) + 1):
         # Header row
         if r == 0:
@@ -211,7 +211,7 @@ def main():
                     out.cell(row = r + 1, column = col + 1).value = teamstats[sortedratings[r - 1][0]]["info"][col - 6]
 
     # Save the sheet with the output
-    wb.save('Bradley-Terry Spreadsheet NCAA Hockey.xlsx')
+    wb.save('sample.xlsx')
     return ratings
 
 if __name__ == "__main__":
