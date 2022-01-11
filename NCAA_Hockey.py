@@ -157,8 +157,13 @@ def readGames(teamstats, games, filename):
         team2 = firstsheet.cell(row = g, column = 4).value.strip()
         team2score = firstsheet.cell(row = g, column = 5).value
         regulation = firstsheet.cell(row = g, column = 6).value
+        # Remove possible padding
         if regulation is not None:
             regulation = regulation.strip()
+        # Game hasn't been played yet
+        if team1score == '' or team1score is None or team2score == '' or team2score is None:
+            g += 1
+            continue
         
         # Initialize if necessary
         if team1 not in teamstats:
@@ -232,5 +237,5 @@ def main(read):
 
 if __name__ == "__main__":
     # Replace with your filenames
-    teamstats = main('../NCAA games.xlsx')
-    writeOutput(teamstats, 'Bradley-Terry Spreadsheet NCAA Hockey.xlsx')
+    teamstats = main('../women.xlsx')
+    writeOutput(teamstats, 'Bradley-Terry Spreadsheet NCAA Women Hockey.xlsx')
