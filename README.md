@@ -2,7 +2,7 @@
 Calculates Bradley-Terry ratings given teams, games and records
 
 Getting Started: \
-You will need to download openpyxl for python \
+You will need to download openpyxl and gspread for python \
 For all non-JSON versions, you need a xlsx file with 1 sheet: \
 Sheet 1 (Every game played) - Column A (Winning Team), Column B (Winning Team Score), Column C (Losing Team), Column D (Losing Team Score) \
 All columns are required in this sheet \
