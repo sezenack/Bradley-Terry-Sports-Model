@@ -1,6 +1,11 @@
-import openpyxl
+import json
 import gspread
-import datetime
+import urllib.request, urllib.error, urllib.parse
+from datetime import datetime, timedelta
+from bs4 import BeautifulSoup
+
+STARTDATE = datetime.now()
+FSTARTDATE = STARTDATE.strftime("%Y%m%d")
 
 def writeOutput(teamstats, filename):
     # Make ratings dict for output
@@ -24,49 +29,44 @@ def writeOutput(teamstats, filename):
         row = []
         # Timestamp for viewers to know most recent update
         if r == 0:
-            row = ['Last Updated:', datetime.datetime.now().strftime("%m/%d/%Y, %H:%M:%S")]
+            row = ['Last Updated:', datetime.now().strftime("%m/%d/%Y, %H:%M:%S")]
         # Header row
         elif r == 1:
-            row = ['Rank','Team','Rating','Win % Rank','Record','Win %','Win Ratio','SOS Rank','SOS']
+            row = ['Rank','Team','Rating','Avg Corsi % Rank','Avg Corsi %','Corsi Ratio','SOS Rank','SOS']
         else:
             # Nine columns
-            for col in range(9):
+            for col in range(8):
                 # Col 0 is the rank
                 if col == 0:
                     row.append(r - 1)
                 # Col 1 is the team name, col 2 is the rating
                 elif col < 3:
                     row.append(sortedratings[r - 2][col - 1])
-                # Formula to calculate the rank of winning %
+                # Formula to calculate the rank of avg corsi %
                 elif col == 3:
-                    row.append("=RANK(F" + str(r + 1) + ",F3:F" + str(len(sortedratings) + 2) + ")")
-                # Output record
-                elif col == 4:
-                    row.append(str(teamstats[sortedratings[r - 2][0]]["record"][0]) \
-                        + "-" + str(teamstats[sortedratings[r - 2][0]]["record"][1]) + "-" \
-                        + str(teamstats[sortedratings[r - 2][0]]["record"][2]))
-                # Output win % (col 5) and win ratio (col 6)
-                elif col < 7:
-                    row.append(teamstats[sortedratings[r - 2][0]]["info"][col - 5])
+                    row.append("=RANK(E" + str(r + 1) + ",E3:E" + str(len(sortedratings) + 2) + ")")
+                # Output avg corsi % (col 4) and avg corsi ratio (col 5)
+                elif col < 6:
+                    row.append(teamstats[sortedratings[r - 2][0]]["info"][col - 4])
                 # Formula to calculate the SOS rank
-                elif col == 7:
-                    row.append("=RANK(I" + str(r + 1) + ",I3:I" + str(len(sortedratings) + 2) + ")")
-                # Output SOS (col 8)
+                elif col == 6:
+                    row.append("=RANK(H" + str(r + 1) + ",H3:H" + str(len(sortedratings) + 2) + ")")
+                # Output SOS (col 7)
                 else:
-                    row.append(teamstats[sortedratings[r - 2][0]]["info"][col - 6])
+                    row.append(teamstats[sortedratings[r - 2][0]]["info"][col - 5])
 
         # Add row to sheet
         sheet.append(row)
 
     # Add output
-    out.update("A1:I" + str(len(sheet)), sheet, raw=False)
+    out.update("A1:H" + str(len(sheet)), sheet, raw=False)
 
 def scaleRatings(teamstats):
-    # Scale the ratings to an average of 100
+    # Scale the ratings to an average of 50
     for _ in range(10):
         scale_wins = 0
         for key in teamstats:
-            scale_wins += 100 / (100 + teamstats[key]["rating"])
+            scale_wins += 50 / (50 + teamstats[key]["rating"])
         # Divide by half the total number of teams
         scale = scale_wins / (len(teamstats) / 2)
         
@@ -104,7 +104,7 @@ def calculateRatings(teamstats, games):
         # For every team, calculate:
         for key in teamstats:
             # New rating for the team equals the team's wins divided by expected wins multiplied by the old rating
-            wins = teamstats[key]["record"][0] + 0.5 * teamstats[key]["record"][2]
+            wins = teamstats[key]["record"][0]
             teamstats[key]["new_rating"] = (wins / teamstats[key]["expected"]) * teamstats[key]["rating"]
             
             # Update the SOS for the team
@@ -132,93 +132,98 @@ def updateInfo(teamstats):
         # If team is undefeated or winless, we'll get a divide by 0 error
         # Note: this formula is most effective when there are no undefeated or winless teams
         # and a chain of wins (or ties) can be made from every team to any other team
-        wins = teamstats[key]["record"][0] + 0.5 * teamstats[key]["record"][2]
-        ratio = wins / (teamstats[key]["record"][1] + 0.5 * teamstats[key]["record"][2])
-        # Add the team's win %, win ratio and sos is intialized to 0 (to be summed later)
-        teaminfo = [wins / (teamstats[key]["record"][0] + teamstats[key]["record"][1] + teamstats[key]["record"][2]) * 100, ratio, 0]
+        wins = teamstats[key]["record"][0]
+        ratio = wins / teamstats[key]["record"][1]
+        # Add the team's avg corsi %, avg corsi ratio and sos is intialized to 0 (to be summed later)
+        teaminfo = [wins / (teamstats[key]["record"][0] + teamstats[key]["record"][1]) * 100, ratio, 0]
         # Add the list of team info to the info dict
         teamstats[key]["info"] = teaminfo
 
+def getCorsiData(filename):
+    # List of all games with links to corsi data
+    # Games get cached in json so we only read current day
+    url = "https://www.collegehockeynews.com/schedules/?date={}&de=20230410".format(FSTARTDATE)
+    f = urllib.request.urlopen(url)
+    html = f.read()
+    f.close()
+    with open(filename, "r") as file:
+        gameDict = json.load(file)
+
+    # Get table with links to set up iteration for scraping
+    soup = BeautifulSoup(html, "html.parser")
+    table = soup.find("table",{"class":"data schedule full"})
+    table = table.find("tbody")   
+    metricLinks = table.find_all("td", {"class": "noprint lomobile center m"})
+
+    for metric in metricLinks:
+        # Open metrics page
+        if metric.get_text().strip() != "":
+            # Set up scraping of metrics
+            url = "https://www.collegehockeynews.com" + metric.find("a")["href"]
+            f = urllib.request.urlopen(url)
+            html = f.read()
+            f.close()
+            
+            # Scrape team names, date of game and close corsi from page
+            try:
+                soupGame = BeautifulSoup(html, "html.parser")
+                aTeam, hTeam = soupGame.find('h2').get_text().split(" vs. ")
+                date = datetime.strptime(soupGame.find('div', {'id': 'content'}).find('h3').get_text(), "%A, %B %d, %Y").date()
+                shotTables = soupGame.find_all("table")
+                aCF = int(shotTables[0].find("tfoot").find("td",{"class":"cls tsa"}).get_text())
+                hCF = int(shotTables[1].find("tfoot").find("td",{"class":"cls tsa"}).get_text())
+            except Exception as e:
+                print(e)
+                continue
+
+            # Create a unique key for each game and add info to the dictionary
+            key = str(date) + aTeam + hTeam
+            print(key)
+            gameDict[key] = {"date": str(date), "aTeam": aTeam, "aCF": aCF,  "hTeam": hTeam, "hCF": hCF, "url": url}
+
+    # Dump updated data into json as cache
+    with open(filename, "w") as file:
+        json.dump(gameDict, file)
+
+    return gameDict
+
 def readGames(teamstats, games, filename):
-    # Open the spreadsheet and assign the first 2 sheets
-    # Replace with your xlsx file name
-    wb = openpyxl.load_workbook(filename)
-    firstsheet = wb.worksheets[0]
+    # Get corsi data from local json caching results using function
+    data = getCorsiData(filename)
 
     # Read in every game with the teams
-    g = 2
-    while g < firstsheet.max_row + 1:
-        # Skip exhibition games
-        marker = firstsheet.cell(row = g, column = 7).value.strip()
-        if marker == 'ex' or marker == 'n3':
-            g += 1
-            continue
-
-        team1 = firstsheet.cell(row = g, column = 1).value.strip()
-        team1score = firstsheet.cell(row = g, column = 2).value
-        team2 = firstsheet.cell(row = g, column = 4).value.strip()
-        team2score = firstsheet.cell(row = g, column = 5).value
-        regulation = firstsheet.cell(row = g, column = 6).value
-        # Remove possible padding
-        if regulation is not None:
-            regulation = regulation.strip()
-        # Game hasn't been played yet
-        if team1score == '' or team1score is None or team2score == '' or team2score is None:
-            g += 1
-            continue
+    for game in data:
+        info = data[game]
+        team1 = info["aTeam"]
+        team1closecorsi = info["aCF"]
+        team2 = info["hTeam"]
+        team2closecorsi = info["hCF"]
         
         # Initialize if necessary
         if team1 not in teamstats:
             # Initialize team dict
             teamstats[team1] = dict()
             # Initialize record to 0-0
-            teamstats[team1]["record"] = [0, 0, 0]
-            # Always start with 100 as every team's rating (using iteration to solve the recursive problem)
-            teamstats[team1]["rating"] = 100
+            teamstats[team1]["record"] = [0, 0]
+            # Always start with 50 as every team's rating (using iteration to solve the recursive problem)
+            teamstats[team1]["rating"] = 50
         if team2 not in teamstats:
             # Initialize team dict
             teamstats[team2] = dict()
             # Initialize record to 0-0
-            teamstats[team2]["record"] = [0, 0, 0]
-            # Always start with 100 as every team's rating (using iteration to solve the recursive problem)
-            teamstats[team2]["rating"] = 100
+            teamstats[team2]["record"] = [0, 0]
+            # Always start with 50 as every team's rating (using iteration to solve the recursive problem)
+            teamstats[team2]["rating"] = 50
         
-        # Check to see winner
-        # Counts all OT as ties
-        if (regulation != '' and regulation is not None) or team1score == team2score:
-            teamstats[team1]["record"][2] += 1
-            teamstats[team2]["record"][2] += 1
-        elif team1score > team2score:
-            teamstats[team1]["record"][0] += 1
-            teamstats[team2]["record"][1] += 1
-        else:
-            teamstats[team1]["record"][1] += 1
-            teamstats[team2]["record"][0] += 1
-        
-        # use 55/45 weights for OT
-        #if team1score == team2score:
-            # teamstats[team1]["record"][2] += 1
-            # teamstats[team2]["record"][2] += 1
-        #elif team1score > team2score and (regulation == '' or regulation is None):
-            # teamstats[team1]["record"][0] += 1
-            # teamstats[team2]["record"][1] += 1
-        #elif team1score < team2score and (regulation == '' or regulation is None):
-            # teamstats[team1]["record"][1] += 1
-            # teamstats[team2]["record"][0] += 1
-        #elif team1score > team2score:
-            # teamstats[team1]["record"][0] += 0.55
-            # teamstats[team1]["record"][1] += 0.45
-            # teamstats[team2]["record"][1] += 0.55
-            # teamstats[team2]["record"][0] += 0.45
-        #else:
-            # teamstats[team1]["record"][1] += 0.55
-            # teamstats[team1]["record"][0] += 0.45
-            # teamstats[team2]["record"][0] += 0.55
-            # teamstats[team2]["record"][1] += 0.45
+        # Total shot attempts
+        total = team1closecorsi + team2closecorsi
+        # Use decimal wins
+        teamstats[team1]["record"][0] += team1closecorsi / total
+        teamstats[team2]["record"][1] += team1closecorsi / total
+        teamstats[team1]["record"][1] += team2closecorsi / total
+        teamstats[team2]["record"][0] += team2closecorsi / total
         
         games.append((team1, team2))
-        # Increment counter for reading the spreadsheet
-        g += 1
 
 def main(read):
     # List of tuples which are the games; each tuple is (winner, loser)
@@ -227,7 +232,7 @@ def main(read):
     # Mega dictionary with all info
     # key = team name
     # value = dictionary with: rating (int), record (list of [wins, losses]), expected wins (int)
-    # new rating (int) and info (list of [win %, win ratio, strength of schedule])
+    # new rating (int) and info (list of [avg corsi %, corsi ratio, strength of schedule])
     teamstats = dict()
 
     readGames(teamstats, games, read)
@@ -239,5 +244,5 @@ def main(read):
 
 if __name__ == "__main__":
     # Replace with your filenames
-    teamstats = main('../NCAA games.xlsx')
-    writeOutput(teamstats, 'SRIRACHA (Stephen Really Is Rating American College Hockey Also)')
+    teamstats = main('../closeCorsi.json')
+    writeOutput(teamstats, "SNACC (Stephen's New Adjusted Close Corsi)")
